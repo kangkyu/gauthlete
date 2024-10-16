@@ -3,10 +3,25 @@ package gauthlete
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"time"
 )
+
+const (
+	contentTypeJSON = "application/json;charset=UTF-8"
+	acceptJSON      = "application/json"
+)
+
+type AuthleteError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+func (e AuthleteError) Error() string {
+	return e.Message
+}
 
 // ServiceClient represents the API client
 type ServiceClient struct {
@@ -35,25 +50,35 @@ func NewServiceClient() *ServiceClient {
 
 // TokenIntrospect introspects a token
 func (c *ServiceClient) TokenIntrospect(token string) (*IntrospectionResponse, error) {
+	u := c.baseURL + "/api/auth/introspection"
+
 	payload := map[string]string{"token": token}
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
-
-	req, err := http.NewRequest("POST", c.baseURL+"/api/auth/introspection", bytes.NewBuffer(jsonPayload))
+	req, err := http.NewRequest("POST", u, bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		return nil, err
 	}
 
 	req.SetBasicAuth(c.apiKey, c.apiSecret)
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", contentTypeJSON)
+	req.Header.Set("Accept", acceptJSON)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var authleteErr AuthleteError
+		if err := json.NewDecoder(resp.Body).Decode(&authleteErr); err != nil {
+			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+		return nil, fmt.Errorf("Authlete error: %s (code: %d)", authleteErr.Message, authleteErr.Code)
+	}
 
 	var introspectionResp IntrospectionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&introspectionResp); err != nil {
@@ -66,8 +91,150 @@ func (c *ServiceClient) TokenIntrospect(token string) (*IntrospectionResponse, e
 // IntrospectionResponse represents the response from token introspection
 type IntrospectionResponse struct {
 	Active bool `json:"active"`
-	// Add other fields as per Authlete's API response
+	// TODO: Add other fields as per Authlete API response
 }
 
 // TODO: Add other Authlete API methods...
 // Authorization Service API
+
+func (c *ServiceClient) Authorization(parameters string) (*AuthorizationResponse, error) {
+	url := c.baseURL + "/api/auth/authorization"
+	payload := map[string]string{"parameters": parameters}
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.SetBasicAuth(c.apiKey, c.apiSecret)
+	req.Header.Set("Content-Type", contentTypeJSON)
+	req.Header.Set("Accept", acceptJSON)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("API call failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var authleteErr AuthleteError
+		if err := json.NewDecoder(resp.Body).Decode(&authleteErr); err != nil {
+			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+		return nil, authleteErr
+	}
+
+	var authResp AuthorizationResponse
+	if err := json.NewDecoder(resp.Body).Decode(&authResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &authResp, nil
+}
+
+type AuthorizationResponse struct {
+	ResultCode    string `json:"resultCode,omitempty"`
+	ResultMessage string `json:"resultMessage,omitempty"`
+
+	Action string `json:"action,omitempty"`
+	Ticket string `json:"ticket,omitempty"`
+}
+
+func (c *ServiceClient) AuthorizationFail(ticket string) (*AuthorizationFailResponse, error) {
+	u := c.baseURL + "/api/auth/authorization/fail"
+	payload := map[string]string{"ticket": ticket}
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal payload: %w", err)
+	}
+	responseContainer := &AuthorizationFailResponse{}
+
+	req, err := http.NewRequest("POST", u, bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.SetBasicAuth(c.apiKey, c.apiSecret)
+	req.Header.Set("Content-Type", contentTypeJSON)
+	req.Header.Set("Accept", acceptJSON)
+
+	res, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("API call failed: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var authleteErr AuthleteError
+		if err := json.NewDecoder(res.Body).Decode(&authleteErr); err != nil {
+			return nil, fmt.Errorf("unexpected status code: %d", res.StatusCode)
+		}
+		return nil, authleteErr
+	}
+
+	// Convert the JSON (body) to an instance.
+	if err := json.NewDecoder(res.Body).Decode(&responseContainer); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return responseContainer, nil
+}
+
+func (c *ServiceClient) AuthorizationIssue(ticket string) (*AuthorizationIssueResponse, error) {
+	u := c.baseURL + "/api/auth/authorization/issue"
+	payload := map[string]string{"ticket": ticket}
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal payload: %w", err)
+	}
+	responseContainer := &AuthorizationIssueResponse{}
+
+	req, err := http.NewRequest("POST", u, bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.SetBasicAuth(c.apiKey, c.apiSecret)
+	req.Header.Set("Content-Type", contentTypeJSON)
+	req.Header.Set("Accept", acceptJSON)
+
+	res, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("API call failed: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		var authleteErr AuthleteError
+		if err := json.NewDecoder(res.Body).Decode(&authleteErr); err != nil {
+			return nil, fmt.Errorf("unexpected status code: %d", res.StatusCode)
+		}
+		return nil, authleteErr
+	}
+
+	// Convert the JSON (body) to an instance.
+	if err := json.NewDecoder(res.Body).Decode(&responseContainer); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return responseContainer, nil
+}
+
+type AuthorizationFailResponse struct {
+	ResultCode    string `json:"resultCode,omitempty"`
+	ResultMessage string `json:"resultMessage,omitempty"`
+
+	Action          string `json:"action,omitempty"`
+	ResponseContent string `json:"responseContent,omitempty"`
+}
+
+type AuthorizationIssueResponse struct {
+	ResultCode    string `json:"resultCode,omitempty"`
+	ResultMessage string `json:"resultMessage,omitempty"`
+
+	Action          string `json:"action,omitempty"`
+	ResponseContent string `json:"responseContent,omitempty"`
+	// AccessToken, IdToken, AuthorizationCode, JwtAccessToken
+}
