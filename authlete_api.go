@@ -183,9 +183,9 @@ func (c *ServiceClient) AuthorizationFail(ticket string) (*AuthorizationFailResp
 	return responseContainer, nil
 }
 
-func (c *ServiceClient) AuthorizationIssue(ticket string) (*AuthorizationIssueResponse, error) {
+func (c *ServiceClient) AuthorizationIssue(ticket, subject string) (*AuthorizationIssueResponse, error) {
 	u := c.baseURL + "/api/auth/authorization/issue"
-	payload := map[string]string{"ticket": ticket}
+	payload := map[string]string{"ticket": ticket, "subject": subject}
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal payload: %w", err)
@@ -234,7 +234,66 @@ type AuthorizationIssueResponse struct {
 	ResultCode    string `json:"resultCode,omitempty"`
 	ResultMessage string `json:"resultMessage,omitempty"`
 
-	Action          string `json:"action,omitempty"`
-	ResponseContent string `json:"responseContent,omitempty"`
-	// AccessToken, IdToken, AuthorizationCode, JwtAccessToken
+	Action               string `json:"action,omitempty"`
+	ResponseContent      string `json:"responseContent,omitempty"`
+	AccessToken          string `json:"accessToken"`
+	AccessTokenExpiresAt int64  `json:"accessTokenExpiresAt"`
+	AccessTokenDuration  int64  `json:"accessTokenDuration"`
+	IdToken              string `json:"idToken"`
+	AuthorizationCode    string `json:"authorizationCode"`
+	JwtAccessToken       string `json:"jwtAccessToken"`
+	// there are more in the docs
+}
+
+// TokenResponse represents the response from Authlete's /api/auth/token API
+type TokenResponse struct {
+	ResultCode    string `json:"resultCode"`
+	ResultMessage string `json:"resultMessage"`
+
+	Action          string `json:"action"`
+	ResponseContent string `json:"responseContent"`
+	AccessToken     string `json:"accessToken"`
+	TokenType       string `json:"tokenType"`
+	ExpiresIn       int64  `json:"expiresIn"`
+	RefreshToken    string `json:"refreshToken"`
+}
+
+// Token sends a token request to Authlete's /api/auth/token API
+func (c *ServiceClient) Token(parameters string) (*TokenResponse, error) {
+	url := c.baseURL + "/api/auth/token"
+
+	payload := map[string]string{"parameters": parameters}
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.SetBasicAuth(c.apiKey, c.apiSecret)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("API call failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var authleteErr AuthleteError
+		if err := json.NewDecoder(resp.Body).Decode(&authleteErr); err != nil {
+			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+		return nil, authleteErr
+	}
+
+	var tokenResp TokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &tokenResp, nil
 }
