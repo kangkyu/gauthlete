@@ -177,7 +177,7 @@ func (c *ServiceClient) AuthorizationFail(ticket string) (*AuthorizationFailResp
 	}
 
 	// Convert the JSON (body) to an instance.
-	if err := json.NewDecoder(res.Body).Decode(&responseContainer); err != nil {
+	if err := json.NewDecoder(res.Body).Decode(responseContainer); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 	return responseContainer, nil
@@ -216,7 +216,7 @@ func (c *ServiceClient) AuthorizationIssue(ticket, subject string) (*Authorizati
 	}
 
 	// Convert the JSON (body) to an instance.
-	if err := json.NewDecoder(res.Body).Decode(&responseContainer); err != nil {
+	if err := json.NewDecoder(res.Body).Decode(responseContainer); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 	return responseContainer, nil
@@ -259,10 +259,13 @@ type TokenResponse struct {
 }
 
 // Token sends a token request to Authlete's /api/auth/token API
-func (c *ServiceClient) Token(parameters string) (*TokenResponse, error) {
+func (c *ServiceClient) Token(parameters, clientID, clientSecret string) (*TokenResponse, error) {
 	url := c.baseURL + "/api/auth/token"
 
-	payload := map[string]string{"parameters": parameters}
+	payload := map[string]string{
+		"parameters": parameters,
+		"clientId":   clientID,
+	}
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal payload: %w", err)
