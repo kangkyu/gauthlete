@@ -91,10 +91,9 @@ func (c *ServiceClient) TokenIntrospect(token string) (*IntrospectionResponse, e
 // IntrospectionResponse represents the response from token introspection
 type IntrospectionResponse struct {
 	Active bool `json:"active"`
-	// TODO: Add other fields as per Authlete API response
+	// Add other fields as needed
 }
 
-// TODO: Add other Authlete API methods...
 // Authorization Service API
 
 func (c *ServiceClient) Authorization(parameters string) (*AuthorizationResponse, error) {
@@ -300,3 +299,5 @@ func (c *ServiceClient) Token(parameters, clientID, clientSecret string) (*Token
 
 	return &tokenResp, nil
 }
+
+// TODO: Add other Authlete API methods...
