@@ -1,6 +1,6 @@
 # Gauthlete
 
-Go library for using Authlete, features are limited
+Go library for using [Authlete](https://www.authlete.com/), features are limited
 but simple to use.
 
 **Under development**
