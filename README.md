@@ -14,3 +14,4 @@ https://so.authlete.com/getting_started?locale=en
 Example apps (for development):
 - client app https://github.com/kangkyu/gauthlete-test-client-app
 - authorization server https://github.com/kangkyu/gauthlete-test-application
+- resource server https://github.com/kangkyu/gauthlete-test-backend-app
